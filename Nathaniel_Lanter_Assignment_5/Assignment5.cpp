@@ -14,156 +14,156 @@ Collaborators / sources: Peter Lauman (original Assignment 4 code); OpenAI ChatG
 Code authorship key used in comments: [ORIG] = Peter Lauman / ChatGPT, unchanged;
                                       [REV]  = added or changed for Assignment 5 (GenAI-assisted, then edited by Nathaniel Lanter)
 */
-#include <array>      // [ORIG] Fixed-size containers hold the nine-by-nine grid.
-#include <fstream>    // [ORIG] File streams read puzzles; [REV] also used to write solution files.
-#include <iostream>   // [ORIG] Standard output displays puzzles and solutions.
-#include <ostream>    // [REV] Lets print() send a grid to either the console or a file.
-#include <string>     // [ORIG] File names and error messages are strings.
-#include <vector>     // [ORIG] Candidate lists store valid numbers for a cell.
+#include <array>      // [ORIG] gives std::array, which holds the 9x9 board.
+#include <fstream>    // [ORIG] file streams for reading puzzles; [REV] now used for writing solutions too.
+#include <iostream>   // [ORIG] console output through std::cout.
+#include <ostream>    // [REV] std::ostream lets one print function target the console or a file.
+#include <string>     // [ORIG] std::string for file names and tokens.
+#include <vector>     // [ORIG] std::vector for lists of candidate digits.
 
 class SudokuSolver {
 private:
-    std::array<std::array<int, 9>, 9> grid{}; // [ORIG] Zero represents an empty square.
-    unsigned long long solutions = 0;        // [ORIG] Track how many completed grids are found.
-    std::ofstream solutionFile;              // [REV] Output stream for this puzzle's solutionN.txt.
-
-    // [ORIG] Check whether a number violates any Sudoku constraint at a given square.
+    std::array<std::array<int, 9>, 9> grid{}; // [ORIG] the board; 0 means the square is still blank.
+    unsigned long long solutions = 0;        // [ORIG] running total of completed boards discovered.
+    std::ofstream solutionFile;              // [REV] file handle for the current puzzle's solutionN.txt.
+ 
+    // [ORIG] Decide if placing "value" at (row, col) breaks a Sudoku rule.
     bool allowed(int row, int col, int value) const {
-        for (int i = 0; i < 9; ++i) { // [ORIG] Scan the corresponding row and column.
-            if (grid[row][i] == value || grid[i][col] == value) return false; // [ORIG] Digit already in row/column.
+        for (int i = 0; i < 9; ++i) { // [ORIG] walk along the whole row and the whole column together.
+            if (grid[row][i] == value || grid[i][col] == value) return false; // [ORIG] the digit is already in that row or column.
         }
-        int firstRow = (row / 3) * 3; // [ORIG] Find the top row of the containing block.
-        int firstCol = (col / 3) * 3; // [ORIG] Find the left column of the containing block.
-        for (int r = firstRow; r < firstRow + 3; ++r) { // [ORIG] Visit each block row.
-            for (int c = firstCol; c < firstCol + 3; ++c) { // [ORIG] Visit each block column.
-                if (grid[r][c] == value) return false; // [ORIG] Reject repeated digits.
+        int firstRow = (row / 3) * 3; // [ORIG] integer division snaps to the first row of this 3x3 box.
+        int firstCol = (col / 3) * 3; // [ORIG] same idea for the box's first column.
+        for (int r = firstRow; r < firstRow + 3; ++r) { // [ORIG] loop over the three rows of the box.
+            for (int c = firstCol; c < firstCol + 3; ++c) { // [ORIG] loop over the three columns of the box.
+                if (grid[r][c] == value) return false; // [ORIG] the digit already sits somewhere in the box.
             }
         }
-        return true; // [ORIG] No conflict was found.
+        return true; // [ORIG] row, column, and box are all free of this digit.
     }
-
-    // [ORIG] Use the empty square with the fewest legal candidates to reduce branching.
+ 
+    // [ORIG] Pick the blank square with the fewest legal digits so the search branches as little as possible.
     bool chooseCell(int& bestRow, int& bestCol, std::vector<int>& bestValues) const {
-        bestRow = -1; // [ORIG] Negative row means the board has no empty cells.
-        bestCol = -1; // [ORIG] Negative column also indicates no choice yet.
-        bestValues.clear(); // [ORIG] Remove candidates from the previous recursion level.
-        for (int r = 0; r < 9; ++r) { // [ORIG] Inspect all rows.
-            for (int c = 0; c < 9; ++c) { // [ORIG] Inspect all columns.
-                if (grid[r][c] != 0) continue; // [ORIG] Ignore already filled cells.
-                std::vector<int> candidates; // [ORIG] Store legal values for this square.
-                for (int v = 1; v <= 9; ++v) { // [ORIG] Try digits one through nine.
-                    if (allowed(r, c, v)) candidates.push_back(v); // [ORIG] Keep legal digits.
+        bestRow = -1; // [ORIG] -1 is the "nothing picked yet" marker for the row.
+        bestCol = -1; // [ORIG] and for the column.
+        bestValues.clear(); // [ORIG] throw away anything left over from an earlier call.
+        for (int r = 0; r < 9; ++r) { // [ORIG] go through each row of the board.
+            for (int c = 0; c < 9; ++c) { // [ORIG] and each square within that row.
+                if (grid[r][c] != 0) continue; // [ORIG] only blank squares are interesting, so skip filled ones.
+                std::vector<int> candidates; // [ORIG] digits that could legally go in this blank.
+                for (int v = 1; v <= 9; ++v) { // [ORIG] test every digit from 1 to 9.
+                    if (allowed(r, c, v)) candidates.push_back(v); // [ORIG] save the digits that pass the rules.
                 }
-                if (candidates.empty()) { // [ORIG] An empty square has no valid digit.
-                    bestRow = r; // [ORIG] Identify the contradictory square.
-                    bestCol = c; // [ORIG] Identify its column.
-                    bestValues.clear(); // [ORIG] Signal that this branch cannot work.
-                    return true; // [ORIG] A blank cell exists, but this branch is impossible.
+                if (candidates.empty()) { // [ORIG] a blank with zero options means this path is hopeless.
+                    bestRow = r; // [ORIG] record where the dead end is (row).
+                    bestCol = c; // [ORIG] and its column.
+                    bestValues.clear(); // [ORIG] an empty list tells the caller nothing can be placed.
+                    return true; // [ORIG] report a blank exists, but with no way to fill it.
                 }
-                if (bestRow == -1 || candidates.size() < bestValues.size()) { // [ORIG] Prefer fewer options.
-                    bestRow = r; // [ORIG] Save the strongest next square.
-                    bestCol = c; // [ORIG] Save its column.
-                    bestValues = candidates; // [ORIG] Save its available digits.
+                if (bestRow == -1 || candidates.size() < bestValues.size()) { // [ORIG] first blank seen, or one with fewer options than the best so far.
+                    bestRow = r; // [ORIG] remember this row as the new best.
+                    bestCol = c; // [ORIG] and its column.
+                    bestValues = candidates; // [ORIG] and the digits that fit there.
                 }
             }
         }
-        return bestRow != -1; // [ORIG] False means the entire board is filled.
+        return bestRow != -1; // [ORIG] false only when no blanks were found, i.e. the board is full.
     }
-
-    // [ORIG] Recursively explore every valid completion of the current grid.
+ 
+    // [ORIG] Depth-first search that finds every way to finish the board.
     void backtrack() {
-        int row, col; // [ORIG] Coordinates of the next empty square.
-        std::vector<int> values; // [ORIG] Valid candidates for that square.
-        if (!chooseCell(row, col, values)) { // [ORIG] No empty squares remain.
-            ++solutions; // [ORIG] Count the completed Sudoku board.
-            std::cout << "Solution " << solutions << ":\n"; // [ORIG] Label each solution on the console.
-            print(std::cout); // [REV] Print the completed board to the console (print now takes a stream).
-            print(solutionFile); // [REV] Also write the completed board to solutionN.txt in the input format.
-            return; // [ORIG] Continue searching after returning to the caller.
+        int row, col; // [ORIG] position of the blank we are about to fill.
+        std::vector<int> values; // [ORIG] digits that may go in that blank.
+        if (!chooseCell(row, col, values)) { // [ORIG] no blanks anywhere means the board is solved.
+            ++solutions; // [ORIG] add one to the solution tally.
+            std::cout << "Solution " << solutions << ":\n"; // [ORIG] console heading showing which solution this is.
+            print(std::cout); // [REV] show the solved board on the console (print now needs a stream argument).
+            print(solutionFile); // [REV] save the same board into solutionN.txt, in the same layout as the puzzle files.
+            return; // [ORIG] go back up so the search can look for further solutions.
         }
-        for (int value : values) { // [ORIG] Explore each candidate in order.
-            grid[row][col] = value; // [ORIG] Tentatively fill the chosen square.
-            backtrack(); // [ORIG] Recursively solve the smaller puzzle.
-            grid[row][col] = 0; // [ORIG] Undo the guess so other possibilities can be tried.
+        for (int value : values) { // [ORIG] try each allowed digit one after another.
+            grid[row][col] = value; // [ORIG] put the digit in as a guess.
+            backtrack(); // [ORIG] recurse to fill in the remaining blanks.
+            grid[row][col] = 0; // [ORIG] take the guess back so the next digit starts from a clean square.
         }
     }
-
+ 
 public:
-    // [ORIG] Read exactly 81 tokens, allowing underscores for blank squares.
+    // [ORIG] Load a puzzle: needs exactly 81 tokens, each a digit 1-9 or "_" for blank.
     bool load(const std::string& filename) {
-        std::ifstream input(filename); // [ORIG] Open the named puzzle.
-        if (!input) return false; // [ORIG] Report missing or unreadable files.
-        grid = {}; // [ORIG] Reset the grid before reading another puzzle.
-        solutions = 0; // [ORIG] Reset the solution counter.
-        std::string token; // [ORIG] Hold each number or underscore.
-        for (int r = 0; r < 9; ++r) { // [ORIG] Read nine rows.
-            for (int c = 0; c < 9; ++c) { // [ORIG] Read nine cells per row.
-                if (!(input >> token)) return false; // [ORIG] Reject short or malformed files.
-                if (token == "_") grid[r][c] = 0; // [ORIG] Convert a blank to zero.
-                else if (token.size() == 1 && token[0] >= '1' && token[0] <= '9') // [ORIG] Accept a single digit 1-9.
-                    grid[r][c] = token[0] - '0'; // [ORIG] Convert a digit to an integer.
-                else return false; // [ORIG] Reject unexpected input.
+        std::ifstream input(filename); // [ORIG] open the puzzle file.
+        if (!input) return false; // [ORIG] give up if the file is missing or unreadable.
+        grid = {}; // [ORIG] clear the board in case an earlier puzzle was loaded.
+        solutions = 0; // [ORIG] restart the solution tally at zero.
+        std::string token; // [ORIG] holds one entry of the file at a time.
+        for (int r = 0; r < 9; ++r) { // [ORIG] nine rows to read.
+            for (int c = 0; c < 9; ++c) { // [ORIG] nine entries in each row.
+                if (!(input >> token)) return false; // [ORIG] the file ran out early, so it is not a full grid.
+                if (token == "_") grid[r][c] = 0; // [ORIG] an underscore becomes a blank (0).
+                else if (token.size() == 1 && token[0] >= '1' && token[0] <= '9') // [ORIG] otherwise it must be one character, 1 through 9.
+                    grid[r][c] = token[0] - '0'; // [ORIG] turn the character into its numeric value.
+                else return false; // [ORIG] anything else is not allowed in a puzzle.
             }
         }
-        if (input >> token) return false; // [ORIG] Reject files containing extra cells.
-        for (int r = 0; r < 9; ++r) { // [ORIG] Check all given values.
-            for (int c = 0; c < 9; ++c) { // [ORIG] Check every square in each row.
-                if (grid[r][c] == 0) continue; // [ORIG] Blank squares cannot conflict.
-                int value = grid[r][c]; // [ORIG] Temporarily remove a given digit.
-                grid[r][c] = 0; // [ORIG] Avoid comparing the given with itself.
-                bool valid = allowed(r, c, value); // [ORIG] Test row, column, and block.
-                grid[r][c] = value; // [ORIG] Restore the original given digit.
-                if (!valid) return false; // [ORIG] Reject conflicting clues.
+        if (input >> token) return false; // [ORIG] more than 81 entries means the file is malformed.
+        for (int r = 0; r < 9; ++r) { // [ORIG] now verify the starting digits do not clash, row by row.
+            for (int c = 0; c < 9; ++c) { // [ORIG] and column by column.
+                if (grid[r][c] == 0) continue; // [ORIG] blanks cannot clash with anything.
+                int value = grid[r][c]; // [ORIG] keep a copy of this starting digit.
+                grid[r][c] = 0; // [ORIG] blank it out so allowed() does not compare it against itself.
+                bool valid = allowed(r, c, value); // [ORIG] see if it fits the row, column, and box.
+                grid[r][c] = value; // [ORIG] put the digit back.
+                if (!valid) return false; // [ORIG] two starting digits conflict, so the puzzle is invalid.
             }
         }
-        return true; // [ORIG] The puzzle was read and validated.
+        return true; // [ORIG] the file was well formed and the clues are consistent.
     }
-
-    // [REV] Print the grid to any output stream (console or file) in the same format as the input files.
+ 
+    // [REV] Write the board to any stream (console or file) using the same layout as the puzzle input.
     void print(std::ostream& out) const {
-        for (const auto& row : grid) { // [ORIG] Iterate through the nine rows.
-            for (int c = 0; c < 9; ++c) { // [ORIG] Print all nine columns.
-                if (c) out << ' '; // [REV] Separate adjacent cells with spaces (now writes to "out").
-                if (row[c] == 0) out << '_'; // [REV] Show blanks as underscores.
-                else out << row[c]; // [REV] Show filled squares as digits.
+        for (const auto& row : grid) { // [ORIG] take the board one row at a time.
+            for (int c = 0; c < 9; ++c) { // [ORIG] and each column within the row.
+                if (c) out << ' '; // [REV] a space goes between entries but not before the first one.
+                if (row[c] == 0) out << '_'; // [REV] a blank prints as an underscore.
+                else out << row[c]; // [REV] a filled square prints as its digit.
             }
-            out << '\n'; // [REV] End the current row.
+            out << '\n'; // [REV] newline after each of the nine rows.
         }
-        out << '\n'; // [REV] Blank line separates grids visually.
+        out << '\n'; // [REV] an empty line after the grid keeps consecutive grids apart.
     }
-
-    // [REV] Solve the loaded puzzle and write all results to the named solution file.
+ 
+    // [REV] Run the search and put the results into the named solution file.
     void solve(const std::string& solutionName) {
-        solutionFile.open(solutionName); // [REV] Create/overwrite solutionN.txt for this puzzle.
-        backtrack(); // [ORIG] Begin recursive depth-first search.
-        if (solutions == 0) { // [ORIG] Handle failure.
-            std::cout << "No solution found\n"; // [ORIG] Console message for unsolvable boards.
-            solutionFile << "No solution found.\n"; // [REV] File must contain exactly this single line.
-        } else { // [REV] At least one solution was found.
-            std::cout << "Total solutions: " << solutions << "\n"; // [ORIG] Report count on the console.
-            solutionFile << "Solutions found: " << solutions << "\n"; // [REV] Required final line in the file.
+        solutionFile.open(solutionName); // [REV] open solutionN.txt, replacing any older copy.
+        backtrack(); // [ORIG] start the recursive search for all solutions.
+        if (solutions == 0) { // [ORIG] the search never reached a full board.
+            std::cout << "No solution found\n"; // [ORIG] tell the console user.
+            solutionFile << "No solution found.\n"; // [REV] the file must contain only this one line in that case.
+        } else { // [REV] at least one full board was found.
+            std::cout << "Total solutions: " << solutions << "\n"; // [ORIG] console summary of the count.
+            solutionFile << "Solutions found: " << solutions << "\n"; // [REV] the required closing line of the file.
         }
-        solutionFile.close(); // [REV] Flush and close the file so it is fully written.
+        solutionFile.close(); // [REV] close the stream so everything is flushed to disk.
     }
 };
-
-// [ORIG] Run the same object-oriented solver on all five assigned puzzle files.
+ 
+// [ORIG] Process the five puzzles one after another with a new solver object each time.
 int main() {
-    for (int number = 1; number <= 5; ++number) { // [ORIG] Process every supplied puzzle.
-        std::string filename = "puzzle" + std::to_string(number) + ".txt"; // [ORIG] Build file name.
-        std::string solutionName = "solution" + std::to_string(number) + ".txt"; // [REV] Build output file name.
-        SudokuSolver sudoku; // [ORIG] Create a fresh object for this puzzle.
-        std::cout << "=== " << filename << " ===\n"; // [ORIG] Identify the input file.
-        if (!sudoku.load(filename)) { // [ORIG] Read and validate the puzzle.
-            std::cout << "Unable to read puzzle or invalid starting grid.\n\n"; // [ORIG] Explain failure.
-            std::ofstream bad(solutionName); // [REV] Still create a solution file for this puzzle.
-            bad << "No solution found.\n"; // [REV] An unusable puzzle has no solution.
-            continue; // [ORIG] Move on to the next puzzle file.
+    for (int number = 1; number <= 5; ++number) { // [ORIG] puzzle numbers 1 through 5.
+        std::string filename = "puzzle" + std::to_string(number) + ".txt"; // [ORIG] name of the input file, e.g. puzzle3.txt.
+        std::string solutionName = "solution" + std::to_string(number) + ".txt"; // [REV] name of the matching output file.
+        SudokuSolver sudoku; // [ORIG] fresh solver so nothing carries over between puzzles.
+        std::cout << "=== " << filename << " ===\n"; // [ORIG] banner showing which puzzle is being handled.
+        if (!sudoku.load(filename)) { // [ORIG] try to read and check the puzzle.
+            std::cout << "Unable to read puzzle or invalid starting grid.\n\n"; // [ORIG] let the user know the puzzle was rejected.
+            std::ofstream bad(solutionName); // [REV] still produce a solution file for this puzzle number.
+            bad << "No solution found.\n"; // [REV] a puzzle that cannot be used has no solutions.
+            continue; // [ORIG] skip ahead to the next puzzle.
         }
-        std::cout << "Original puzzle:\n"; // [ORIG] Label the given grid.
-        sudoku.print(std::cout); // [REV] Show the initial board (print now takes a stream).
-        sudoku.solve(solutionName); // [REV] Find all solutions and write them to solutionN.txt.
-        std::cout << '\n'; // [ORIG] Separate results from different puzzles.
+        std::cout << "Original puzzle:\n"; // [ORIG] heading above the starting grid.
+        sudoku.print(std::cout); // [REV] display the starting grid on the console.
+        sudoku.solve(solutionName); // [REV] search for all solutions and save them in solutionN.txt.
+        std::cout << '\n'; // [ORIG] blank line between puzzles on the console.
     }
-    return 0; // [ORIG] Finish successfully.
+    return 0; // [ORIG] normal exit.
 }
